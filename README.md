@@ -5,6 +5,12 @@
 This project provides a CUDA-accelerated package for converting 3D meshes into Gaussian Splatting representations. 
 It also includes a pure Python implementation for reference and comparison.
 
+For ~50K faces mesh: 
+
+| CUDA | Python |
+| --- | --- |
+| 0.44 sec | 82 sec |
+
 ## Features
 
 - Utilizes CUDA for high-performance conversion of meshes to Gaussian splats.
@@ -13,7 +19,8 @@ It also includes a pure Python implementation for reference and comparison.
 
 ## Installation
 
-To install the CUDA package, clone this repository and run the following command from the root directory:
+To install the CUDA package, clone this repository and run the following command from the root directory.
+Note: I only tested it with torch2.5.1+cu121.
 
 ```bash
 git clone https://github.com/hwanhuh/mesh2gaussian.git
@@ -46,4 +53,4 @@ The conversion process samples points on the surface of the input mesh and repre
 The density and scale of these Gaussians are determined by the local geometry of the mesh, aiming to create a faithful representation of the original surface.
 The CUDA implementation significantly accelerates this process by parallelizing the sampling and Gaussian generation steps on the GPU.
 
-- I use GaussModel class implemented in [torch-splatting](https://github.com/hbb1/torch-splatting)
+- I use the GaussModel class implemented in [torch-splatting](https://github.com/hbb1/torch-splatting)
