@@ -18,6 +18,7 @@ def main():
     parser.add_argument("--density_factor", "-k", type=float, default=2.0, help="Density factor 'k' for overlapping Gaussians.")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu", help="Device to use for processing (e.g., 'cuda' or 'cpu').")
     parser.add_argument("--sh_degree", type=int, default=0, help="Maximum degree of spherical harmonics (0 for simple RGB).")
+    parser.add_argument("--preserve_original_coords", action="store_true", help="Preserve original GLB coordinates and scale.")
     args = parser.parse_args()
 
     print(f"Loading mesh from: {args.input_path}")
@@ -29,18 +30,26 @@ def main():
         return
 
     if isinstance(mesh, trimesh.Scene):
-        print("Scene object loaded, concatenating geometries.")
         mesh = mesh.dump(concatenate=True)
 
-    vertices = mesh.vertices
+    original_vertices = mesh.vertices.copy()
+    original_center = original_vertices.mean(axis=0)
+    original_max_extent = np.max(np.linalg.norm(original_vertices - original_center, axis=1))
+    
+    if not args.preserve_original_coords:
+        print("Normalizing mesh...")
+        vertices = original_vertices.copy()
+        vertices -= original_center
+        scale_factor = original_max_extent
+        if scale_factor > 1e-6:
+            vertices /= scale_factor
+        else:
+            scale_factor = 1.0
+    else:
+        vertices = original_vertices.copy()
+        scale_factor = 1.0
+    
     faces = mesh.faces
-    
-    print("Normalizing mesh...")
-    center = vertices.mean(axis=0)
-    vertices -= center
-    max_extent = np.max(np.linalg.norm(vertices, axis=1))
-    vertices /= max_extent 
-    
     print(f"Mesh has {len(vertices)} vertices and {len(faces)} faces.")
 
     uvs = None
@@ -54,13 +63,9 @@ def main():
             texture = np.array(material.baseColorTexture.convert("RGB"))
             uvs = mesh.visual.uv
             print(f"Texture shape: {texture.shape}, UVs shape: {uvs.shape}")
-        else:
-             print("Texture found but could not be converted.")
     
     if texture is None and hasattr(mesh.visual, 'vertex_colors'):
-        print("Using vertex colors.")
         vertex_colors = mesh.visual.vertex_colors[:, :3].astype(np.float32) / 255.0
-        print(f"Vertex colors shape: {vertex_colors.shape}")
 
     try:
         gs_model = mesh_to_gs_cuda(
@@ -78,6 +83,12 @@ def main():
         print(f"Error during conversion: {e}")
         return
 
+    if not args.preserve_original_coords:
+        with torch.no_grad():
+            gs_model._xyz.data = gs_model._xyz.data * scale_factor + torch.tensor(original_center, 
+                                                                                 device=gs_model._xyz.device, 
+                                                                                 dtype=gs_model._xyz.dtype)
+            
     print(f"Saving Gaussian Splatting model to: {args.output_path}")
     gs_model.save_ply(args.output_path)
     
